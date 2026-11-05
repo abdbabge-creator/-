@@ -1,5 +1,4 @@
-
-name: Build Android APK (Zajil Assistant)
+  name: Build Android APK (Zajil Assistant)
 
 on:
   push:
@@ -26,6 +25,18 @@ jobs:
               unzip -o "$f"
             fi
           done
+
+      - name: Patch project settings
+        run: |
+          if [ -f android/settings.gradle ]; then
+            sed -i '/dependencyResolutionManagement/,/}/d' android/settings.gradle || true
+            sed -i '/FAIL_ON_PROJECT_REPOS/d' android/settings.gradle || true
+          fi
+          mkdir -p android/app/src/main/res/mipmap-anydpi-v26
+          if [ -f android/app/src/main/res/drawable/ic_bird_mascot.xml ]; then
+            cp android/app/src/main/res/drawable/ic_bird_mascot.xml android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml || true
+            cp android/app/src/main/res/drawable/ic_bird_mascot.xml android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml || true
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
