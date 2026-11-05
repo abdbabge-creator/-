@@ -13,55 +13,61 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Unpack project archive
+      - name: Inspect and Extract
         run: |
-          for f in *.zip; do
-            if [ -f "$f" ]; then
-              echo "Unpacking $f..."
-              unzip -q -o "$f" || true
+          echo "=== FILES IN REPOSITORY ==="
+          ls -la
+          for f in *; do
+            if [[ "$f" == *.zip ]] || file "$f" | grep -qi "zip"; then
+              echo "Extracting archive: $f"
+              unzip -o -q "$f" || true
             fi
           done
 
-      - name: Patch project settings
-        run: |
-          ANDROID_DIR=$(find . -maxdepth 3 -name "settings.gradle" -exec dirname {} \; | head -n 1)
-          if [ -n "$ANDROID_DIR" ]; then
-            echo "Found Android directory: $ANDROID_DIR"
-            sed -i '/dependencyResolutionManagement/,/}/d' "$ANDROID_DIR/settings.gradle" || true
-            sed -i '/FAIL_ON_PROJECT_REPOS/d' "$ANDROID_DIR/settings.gradle" || true
-            mkdir -p "$ANDROID_DIR/app/src/main/res/mipmap-anydpi-v26"
-            if [ -f "$ANDROID_DIR/app/src/main/res/drawable/ic_bird_mascot.xml" ]; then
-              cp "$ANDROID_DIR/app/src/main/res/drawable/ic_bird_mascot.xml" "$ANDROID_DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" || true
-              cp "$ANDROID_DIR/app/src/main/res/drawable/ic_bird_mascot.xml" "$ANDROID_DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" || true
-            fi
-          fi
-
-      - name: Set up JDK 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.2'
-
-      - name: Build Debug APK with Gradle
+      - name: Install Gradle and Build APK
         run: |
-          ANDROID_DIR=$(find . -maxdepth 3 -name "settings.gradle" -exec dirname {} \; | head -n 1)
-          if [ -z "$ANDROID_DIR" ]; then
-            echo "ERROR: Could not find settings.gradle!"
-            exit 1
+          # 1. Install Gradle 8.2 standalone
+          if ! command -v gradle &> /dev/null; then
+            echo "Installing Gradle 8.2..."
+            curl -sL https://services.gradle.org/distributions/gradle-8.2-bin.zip -o /tmp/gradle.zip
+            unzip -q /tmp/gradle.zip -d /tmp/
+            export PATH="/tmp/gradle-8.2/bin:$PATH"
           fi
+          
+          # 2. Find android project root
+          ANDROID_DIR=$(find . -name "settings.gradle" -exec dirname {} \; | head -n 1)
+          if [ -z "$ANDROID_DIR" ]; then
+            echo "Searching for build.gradle..."
+            ANDROID_DIR=$(find . -name "build.gradle" -not -path "*/app/*" -exec dirname {} \; | head -n 1)
+          fi
+          echo "Android directory is: $ANDROID_DIR"
           cd "$ANDROID_DIR"
-          chmod +x gradlew || true
-          ./gradlew assembleDebug --stacktrace || gradle assembleDebug --stacktrace
 
-      - name: Upload APK File
+          # 3. Clean up any conflicting settings.gradle lines
+          sed -i '/dependencyResolutionManagement/,/}/d' settings.gradle || true
+          sed -i '/FAIL_ON_PROJECT_REPOS/d' settings.gradle || true
+
+          # 4. Ensure launcher icons exist
+          mkdir -p app/src/main/res/mipmap-anydpi-v26
+          if [ -f app/src/main/res/drawable/ic_bird_mascot.xml ]; then
+            cp app/src/main/res/drawable/ic_bird_mascot.xml app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml || true
+            cp app/src/main/res/drawable/ic_bird_mascot.xml app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml || true
+          fi
+
+          # 5. Build Debug APK
+          echo "Building APK now..."
+          gradle assembleDebug --stacktrace
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
