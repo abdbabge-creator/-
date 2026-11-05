@@ -1,8 +1,7 @@
-  name: Build Android APK (Zajil Assistant)
+name: Build APK
 
 on:
   push:
-    branches: [ "main", "master", "رئيسي" ]
   workflow_dispatch:
 
 permissions:
@@ -10,7 +9,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Native Android APK
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -50,8 +49,8 @@ jobs:
           gradle-version: '8.2'
 
       - name: Build Debug APK with Gradle
-        working-directory: ./android
         run: |
+          cd android
           if [ -f gradlew ]; then
             chmod +x gradlew
             ./gradlew assembleDebug --stacktrace
