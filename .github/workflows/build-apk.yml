@@ -21,20 +21,22 @@ jobs:
           for f in *.zip; do
             if [ -f "$f" ]; then
               echo "Unpacking $f..."
-              unzip -o "$f"
+              unzip -q -o "$f" || true
             fi
           done
 
       - name: Patch project settings
         run: |
-          if [ -f android/settings.gradle ]; then
-            sed -i '/dependencyResolutionManagement/,/}/d' android/settings.gradle || true
-            sed -i '/FAIL_ON_PROJECT_REPOS/d' android/settings.gradle || true
-          fi
-          mkdir -p android/app/src/main/res/mipmap-anydpi-v26
-          if [ -f android/app/src/main/res/drawable/ic_bird_mascot.xml ]; then
-            cp android/app/src/main/res/drawable/ic_bird_mascot.xml android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml || true
-            cp android/app/src/main/res/drawable/ic_bird_mascot.xml android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml || true
+          ANDROID_DIR=$(find . -maxdepth 3 -name "settings.gradle" -exec dirname {} \; | head -n 1)
+          if [ -n "$ANDROID_DIR" ]; then
+            echo "Found Android directory: $ANDROID_DIR"
+            sed -i '/dependencyResolutionManagement/,/}/d' "$ANDROID_DIR/settings.gradle" || true
+            sed -i '/FAIL_ON_PROJECT_REPOS/d' "$ANDROID_DIR/settings.gradle" || true
+            mkdir -p "$ANDROID_DIR/app/src/main/res/mipmap-anydpi-v26"
+            if [ -f "$ANDROID_DIR/app/src/main/res/drawable/ic_bird_mascot.xml" ]; then
+              cp "$ANDROID_DIR/app/src/main/res/drawable/ic_bird_mascot.xml" "$ANDROID_DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" || true
+              cp "$ANDROID_DIR/app/src/main/res/drawable/ic_bird_mascot.xml" "$ANDROID_DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" || true
+            fi
           fi
 
       - name: Set up JDK 17
@@ -50,17 +52,18 @@ jobs:
 
       - name: Build Debug APK with Gradle
         run: |
-          cd android
-          if [ -f gradlew ]; then
-            chmod +x gradlew
-            ./gradlew assembleDebug --stacktrace
-          else
-            gradle assembleDebug --stacktrace
+          ANDROID_DIR=$(find . -maxdepth 3 -name "settings.gradle" -exec dirname {} \; | head -n 1)
+          if [ -z "$ANDROID_DIR" ]; then
+            echo "ERROR: Could not find settings.gradle!"
+            exit 1
           fi
+          cd "$ANDROID_DIR"
+          chmod +x gradlew || true
+          ./gradlew assembleDebug --stacktrace || gradle assembleDebug --stacktrace
 
       - name: Upload APK File
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug.apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: app-debug
+          path: '**/build/outputs/apk/debug/*.apk'
           retention-days: 30
